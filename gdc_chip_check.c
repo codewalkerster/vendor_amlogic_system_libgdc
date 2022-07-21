@@ -245,7 +245,9 @@ static int slt_gdc_init_cfg(struct gdc_usr_ctx_s *ctx, struct gdc_param *tparm,
 		return -1;
 
 	if (!ctx->custom_fw) {
-		if (ctx->dev_type == AML_GDC)
+		if (ctx->dev_type == AML_GDC_V3)
+			c_len = sizeof(config_data_aml_c3);
+		else if (ctx->dev_type == AML_GDC || ctx->dev_type == AML_GDC_V2)
 			c_len = sizeof(config_data_aml);
 		else
 			c_len = sizeof(config_data);
@@ -397,6 +399,7 @@ int main(int argc, char* argv[])
 	/* 0: default value, means gdc
 	 * 1: means v1 dewarp (t7 chip)
 	 * 2: means v2 dewarp (p1 and later chips)
+	 * 3: means v3 dewarp (c3 chip)
 	 */
 	int dev_type = ARM_GDC;
 	char *config = NULL;
@@ -425,9 +428,12 @@ int main(int argc, char* argv[])
 	ctx.custom_fw = is_custom_fw;
 	ctx.mem_type = mem_type;
 	ctx.plane_number = plane_number;
-	ctx.dev_type = dev_type > 0 ? AML_GDC : ARM_GDC;
+	ctx.dev_type = dev_type;
 
-	if (dev_type == AML_GDC_V2) {
+	if (dev_type == AML_GDC_V3) {
+		config = (char *)config_data_aml_c3;
+		golden = &output_golden_aml_v3;
+	} else if (dev_type == AML_GDC_V2) {
 		config = (char *)config_data_aml;
 		golden = &output_golden_aml_v2;
 	} else if (dev_type == AML_GDC) {
