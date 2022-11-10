@@ -14,6 +14,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
 	system/memory/libion/kernel-headers/linux/
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-GPL
+LOCAL_LICENSE_CONDITIONS := notice
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 26 && echo OK),OK)
 LOCAL_PROPRIETARY_MODULE := true
@@ -38,6 +40,8 @@ LOCAL_CFLAGS += -g
 LOCAL_CPPFLAGS := -g
 
 LOCAL_MODULE := gdc_test
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-GPL
+LOCAL_LICENSE_CONDITIONS := notice
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 26 && echo OK),OK)
 LOCAL_PROPRIETARY_MODULE := true
@@ -57,6 +61,8 @@ LOCAL_MODULE_SUFFIX := .so
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE_PATH_32 := $(PRODUCT_OUT)/vendor/lib
 LOCAL_MODULE_PATH_64 := $(PRODUCT_OUT)/vendor/lib64
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-GPL
+LOCAL_LICENSE_CONDITIONS := notice
 include $(BUILD_PREBUILT)
 
 # dewarp_test
@@ -78,6 +84,8 @@ LOCAL_CFLAGS += -g
 LOCAL_CPPFLAGS := -g
 
 LOCAL_MODULE := dewarp_test
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-GPL
+LOCAL_LICENSE_CONDITIONS := notice
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 26 && echo OK),OK)
 LOCAL_PROPRIETARY_MODULE := true
