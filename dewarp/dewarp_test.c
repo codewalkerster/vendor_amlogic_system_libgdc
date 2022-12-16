@@ -74,6 +74,7 @@ static void print_usage(void)
 	printf ("  -win3 <WinStartX_WinEndX_WinStartY_WinEndY_ImgStartX_ImgEndX_ImgStartY_ImgEndY_MeshXLen_MeshYLen>                                                       \n");
 	printf ("  -win4 <WinStartX_WinEndX_WinStartY_WinEndY_ImgStartX_ImgEndX_ImgStartY_ImgEndY_MeshXLen_MeshYLen>                                                       \n");
 	printf ("  -prm_mode <0:use proj_param, 1:use clb_param 2:use meshin 3:use dptz_param>                                                                             \n");
+	printf ("  -eis_matrix <Param1_Param2_Param3_Param4_Param5_Param6_Param7_Param8_Param9>                                                                            \n");
 	printf ("  -circle <Num>                                                                                                                                           \n");
 	printf ("  -in_file  <ImageName>                                                                                                                                   \n");
 	printf ("  -out_file <ImageName>                                                                                                                                   \n");
@@ -246,6 +247,14 @@ static int parse_command_line(int argc, char *argv[])
 				sscanf (argv[i], "%d", &dewarp_params.prm_mode) == 1) {
 				param_cnt++;
 				continue;
+			} else if (strcmp (argv[i] + 1, "eis_matrix") == 0 && ++i < argc) {
+				float *eis_matrix = dewarp_params.eis_correct_matrix;
+
+				if (sscanf (argv[i], "%f_%f_%f_%f_%f_%f_%f_%f_%f",
+				&eis_matrix[0], &eis_matrix[1], &eis_matrix[2],
+				&eis_matrix[3], &eis_matrix[4], &eis_matrix[5],
+				&eis_matrix[6], &eis_matrix[7], &eis_matrix[8]) == 9)
+				param_cnt++;
 			} else if (strcmp (argv[i] + 1, "tile_x_step") == 0 && ++i < argc &&
 				sscanf (argv[i], "%d", &dewarp_params.tile_x_step) == 1) {
 				param_cnt++;
@@ -340,6 +349,12 @@ static int parse_command_line(int argc, char *argv[])
 	printf("intrp(%d) replace(%d,%d,%d) edge(%d,%d,%d)\n", proc_param->intrp_mode,
 		proc_param->replace_0, proc_param->replace_1, proc_param->replace_2,
 		proc_param->edge_0, proc_param->edge_1, proc_param->edge_2);
+	if (dewarp_params.prm_mode == 4 || dewarp_params.prm_mode == 5) {
+		printf("eis_correct_matrix:");
+		for (i = 0; i < 9; i++)
+			printf("%f ", dewarp_params.eis_correct_matrix[i]);
+		printf("\n");
+	}
 
 	printf("       in_file:%s out_file:%s\n", in_file, out_file);
 	printf("########################################\n");

@@ -112,10 +112,11 @@ struct dewarp_params {
     struct meshin_param meshin_param[WIN_MAX];
     struct dptz_param dptz_param;
     struct win_param win_param[WIN_MAX];
-    int prm_mode; /* 0. use proj_param, 1.use clb_param, 2. meshin mode 3. use dptz_param */
+    int prm_mode; /* 0. use proj_param, 1.use clb_param, 2.meshin mode 3.use dptz_param 4.EIS only 5.EIS+dewarp */
     int tile_x_step;
     int tile_y_step;
     struct proc_param proc_param;
+    float eis_correct_matrix[9];
 };
 
 typedef enum _dw_proj_mode_ {
