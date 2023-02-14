@@ -18,9 +18,12 @@
 #include <sys/time.h>
 #include <gdc_api.h>
 #include <IONmem.h>
+#include <dma-buf.h>
+#include <dma-heap.h>
 #include "dewarp_api.h"
 
 struct dewarp_params dewarp_params;
+static int mem_type;
 static int process_circle = 1;
 char in_file[256];
 char out_file[256];
@@ -78,6 +81,7 @@ static void print_usage(void)
 	printf ("  -circle <Num>                                                                                                                                           \n");
 	printf ("  -in_file  <ImageName>                                                                                                                                   \n");
 	printf ("  -out_file <ImageName>                                                                                                                                   \n");
+	printf ("  -mem_type <0:ion 1:gdc_dmabuf 2:generic dma buf, /dev/dma_heap/xxx>                                                                                     \n");
 	printf ("  -dump_fw_file <FirmwareName>                                                                                                                            \n");
 	printf ("\n");
 }
@@ -279,6 +283,10 @@ static int parse_command_line(int argc, char *argv[])
 				sscanf (argv[i], "%s", dump_fw_file) == 1) {
 				param_cnt++;
 				continue;
+			} else if (strcmp (argv[i] + 1, "mem_type") == 0 && ++i < argc &&
+				sscanf (argv[i], "%d", &mem_type) == 1) {
+				param_cnt++;
+				continue;
 			}
 		}
 	}
@@ -344,7 +352,7 @@ static int parse_command_line(int argc, char *argv[])
 			win[i].win_start_x, win[i].win_end_x, win[i].win_start_y, win[i].win_end_y,
 			win[i].img_start_x, win[i].img_end_x, win[i].img_start_y, win[i].img_end_y);
 	}
-
+	printf("	   mem_type:%d, 0:ion 1:gdc_dmabuf\n", mem_type);
 	printf("    proc_param:");
 	printf("intrp(%d) replace(%d,%d,%d) edge(%d,%d,%d)\n", proc_param->intrp_mode,
 		proc_param->replace_0, proc_param->replace_1, proc_param->replace_2,
@@ -398,6 +406,7 @@ int main(int argc, char** argv)
 	int fw_len = 300 * 1024;           /* 300KB, just for test */
 	int fw_bytes = 0;
 	int *fw_buffer = NULL;
+	int heap_fd = -1, dmabuf_fd = -1;
 
 	ret = parse_command_line(argc, argv);
 	if (ret < 0)
@@ -435,7 +444,8 @@ int main(int argc, char** argv)
 
 
 	ctx.custom_fw = 0;                 /* not use builtin fw */
-	ctx.mem_type = AML_GDC_MEM_ION;    /* use ION memory to test */
+	ctx.mem_type = mem_type ? AML_GDC_MEM_DMABUF : AML_GDC_MEM_ION;
+					/* 0:use ION memory 1: use GDC dmabuf */
 	ctx.plane_number = plane_number;   /* data in one continuous mem block */
 	ctx.dev_type = AML_GDC;            /* dewarp */
 
@@ -483,6 +493,13 @@ int main(int argc, char** argv)
 	if (ret < 0)
 		goto release_meshin_buf;
 
+	if (mem_type == AML_GENERIC_DMABUF) {
+		/* system heap for test */
+		heap_fd = dmabuf_heap_open(GENERIC_HEAP);
+		if (heap_fd < 0)
+			goto destroy_ctx;
+	}
+
 	if (format == NV12 || format == YV12)
 		i_len = i_y_stride * i_height * 3 / 2;
 	else if (format == Y_GREY)
@@ -494,23 +511,49 @@ int main(int argc, char** argv)
 		o_len = o_y_stride * o_height;
 
 	/* firmware buffer */
-	ret = ion_alloc_mem(ctx.ion_fd, fw_len /*bytes*/, 0);
+	if (mem_type == AML_GDC_MEM_ION)
+		ret = ion_alloc_mem(ctx.ion_fd, fw_len /*bytes*/, 0);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		ret = dmabuf_heap_alloc(heap_fd, fw_len /*bytes*/, 0, &dmabuf_fd);
+	else
+		ret = gdc_alloc_mem(&ctx, fw_len /*bytes*/, CONFIG_BUFF_TYPE);
 	if (ret < 0)
-		goto destroy_ctx;
-	firmware_shared_fd = ret;
+		goto close_generic_heap;
+
+	if (mem_type == AML_GENERIC_DMABUF)
+		firmware_shared_fd = dmabuf_fd;
+	else
+		firmware_shared_fd = ret;
 
 	/* input image buffer */
-	ret = ion_alloc_mem(ctx.ion_fd, i_len /*bytes*/, 0);
+	if (mem_type == AML_GDC_MEM_ION)
+		ret = ion_alloc_mem(ctx.ion_fd, i_len /*bytes*/, 0);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		ret = dmabuf_heap_alloc(heap_fd, i_len /*bytes*/, 0, &dmabuf_fd);
+	else
+		ret = gdc_alloc_mem(&ctx, i_len /*bytes*/, INPUT_BUFF_TYPE);
 	if (ret < 0)
 		goto release_fw_buf;
-	in_shared_fd = ret;
+
+	if (mem_type == AML_GENERIC_DMABUF)
+		in_shared_fd = dmabuf_fd;
+	else
+		in_shared_fd = ret;
 
 	/* output image buffer */
-	ret = ion_alloc_mem(ctx.ion_fd, o_len /*bytes*/, 0);
+	if (mem_type == AML_GDC_MEM_ION)
+		ret = ion_alloc_mem(ctx.ion_fd, o_len /*bytes*/, 0);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		ret = dmabuf_heap_alloc(heap_fd, o_len /*bytes*/, 0, &dmabuf_fd);
+	else
+		ret = gdc_alloc_mem(&ctx, o_len /*bytes*/, OUTPUT_BUFF_TYPE);
 	if (ret < 0)
 		goto release_in_buf;
-	out_shared_fd = ret;
 
+	if (mem_type == AML_GENERIC_DMABUF)
+		out_shared_fd = dmabuf_fd;
+	else
+		out_shared_fd = ret;
 	gdc_gs->config_buffer.plane_number = plane_number;
 	gdc_gs->config_buffer.mem_alloc_type = ctx.mem_type;
 	gdc_gs->config_buffer.shared_fd = firmware_shared_fd;
@@ -541,6 +584,11 @@ int main(int argc, char** argv)
 	printf("fw generation time=%ld ms, total FW bytes:%d\n", myclock() - stime, ret);
 	fw_bytes = ret;
 
+	if (mem_type == AML_GDC_MEM_DMABUF) {
+		gdc_sync_for_device_mem(&ctx, firmware_shared_fd);
+		gdc_sync_for_device_mem(&ctx, in_shared_fd);
+	}
+
 	stime = myclock();
 	for (i = 0; i< process_circle; i++) {
 		ret = gdc_process(&ctx);
@@ -549,6 +597,10 @@ int main(int argc, char** argv)
 			goto release_out_buf;
 		}
 	}
+
+	if (mem_type == AML_GDC_MEM_DMABUF)
+		gdc_sync_for_cpu_mem(&ctx, out_shared_fd);
+
 	printf("driver(HW) time=%ld ms\n", myclock() - stime);
 
 	munmap(fw_buffer, fw_len);
@@ -563,15 +615,33 @@ int main(int argc, char** argv)
 	}
 
 release_out_buf:
-	ion_release_mem(out_shared_fd);
+	if (mem_type == AML_GDC_MEM_ION)
+		ion_release_mem(out_shared_fd);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		dmabuf_heap_release(out_shared_fd);
+	else
+		gdc_release_mem(out_shared_fd);
 release_in_buf:
-	ion_release_mem(in_shared_fd);
+	if (mem_type == AML_GDC_MEM_ION)
+		ion_release_mem(in_shared_fd);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		dmabuf_heap_release(in_shared_fd);
+	else
+		gdc_release_mem(in_shared_fd);
 release_fw_buf:
-	ion_release_mem(firmware_shared_fd);
+	if (mem_type == AML_GDC_MEM_ION)
+		ion_release_mem(firmware_shared_fd);
+	else if (mem_type == AML_GENERIC_DMABUF)
+		dmabuf_heap_release(firmware_shared_fd);
+	else
+		gdc_release_mem(firmware_shared_fd);
+close_generic_heap:
+	if (mem_type == AML_GENERIC_DMABUF)
+		dmabuf_heap_close(heap_fd);
 destroy_ctx:
 	gdc_destroy_ctx(&ctx);
 release_meshin_buf:
-	if(dewarp_params.prm_mode == 2) {
+	if (dewarp_params.prm_mode == 2) {
 		for (i = 0; i < dewarp_params.win_num; i++)
 		free(meshin_data_table[i]);
 	}

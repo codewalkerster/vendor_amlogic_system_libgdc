@@ -37,6 +37,7 @@ typedef unsigned long phys_addr_t;
 enum gdc_memtype_s {
 	AML_GDC_MEM_ION,
 	AML_GDC_MEM_DMABUF,
+	AML_GENERIC_DMABUF,
 	AML_GDC_MEM_INVALID,
 };
 
@@ -293,6 +294,7 @@ struct gdc_settings_with_fw {
 struct gdc_usr_ctx_s {
 	int gdc_client;
 	int ion_fd;
+	int dma_heap_fd;
 	int custom_fw;
 	struct gdc_settings gs;
 	struct gdc_settings_ex gs_ex;
@@ -354,11 +356,22 @@ int gdc_process(struct gdc_usr_ctx_s *ctx);
 
 int gdc_process_with_builtin_fw(struct gdc_usr_ctx_s *ctx);
 
+/* gdc or ion: alloc memory, which will be releasd in gdc_destroy_ctx() */
 int gdc_alloc_buffer (struct gdc_usr_ctx_s *ctx, uint32_t type,
 			struct gdc_alloc_buffer_s *buf, bool cache_flag);
-
+/* gdc or ion: sync cache */
 int gdc_sync_for_device(struct gdc_usr_ctx_s *ctx);
+/* gdc or ion: invalid cache */
 int gdc_sync_for_cpu(struct gdc_usr_ctx_s *ctx);
+
+/** gdc: allocate a block of memory */
+int gdc_alloc_mem(struct gdc_usr_ctx_s *ctx, uint32_t len, uint32_t type);
+/** gdc: free a block of memory */
+void gdc_release_mem(int shared_fd);
+/** gdc: sync cache for a block of memory */
+void gdc_sync_for_device_mem(struct gdc_usr_ctx_s *ctx, int shared_fd);
+/** gdc: invalid cache for a block of memory */
+void gdc_sync_for_cpu_mem(struct gdc_usr_ctx_s *ctx, int shared_fd);
 #if defined (__cplusplus)
 }
 #endif

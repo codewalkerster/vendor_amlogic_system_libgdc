@@ -22,6 +22,8 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <IONmem.h>
+#include <dma-buf.h>
+#include <dma-heap.h>
 #include <gdc_api.h>
 
 #define   FILE_NAME_GDC      "/dev/gdc"
@@ -29,7 +31,7 @@
 
 int gdc_create_ctx(struct gdc_usr_ctx_s *ctx)
 {
-	int ret = -1;
+	int ion_fd = -1, heap_fd = -1;
 	char *dev_name = (ctx->dev_type == ARM_GDC) ? FILE_NAME_GDC :
 						      FILE_NAME_AML_GDC;
 
@@ -40,13 +42,17 @@ int gdc_create_ctx(struct gdc_usr_ctx_s *ctx)
 			errno, strerror(errno));
 		return -1;
 	}
-	ret = ion_mem_init();
-	if (ret < 0) {
-		E_GDC("ionmem init failed\n");
-		return -1;
+
+	heap_fd = dmabuf_heap_open(GENERIC_HEAP);
+	if (heap_fd < 0) {
+		ion_fd = ion_mem_init();
+		if (ion_fd < 0) {
+			E_GDC("%s %d, ion and dma_heap open failed\n", __func__, __LINE__);
+		}
 	}
 
-	ctx->ion_fd = ret;
+	ctx->dma_heap_fd = heap_fd;
+	ctx->ion_fd = ion_fd;
 
 	return 0;
 }
@@ -125,6 +131,11 @@ int gdc_destroy_ctx(struct gdc_usr_ctx_s *ctx)
 	if (ctx->ion_fd >= 0) {
 		ion_mem_exit(ctx->ion_fd);
 		ctx->ion_fd = -1;
+	}
+
+	if (ctx->dma_heap_fd >= 0) {
+		dmabuf_heap_close(ctx->dma_heap_fd);
+		ctx->dma_heap_fd = -1;
 	}
 
 	return 0;
@@ -249,6 +260,147 @@ static int set_buf_fd(gdc_alloc_buffer_t *buf, gdc_buffer_info_t *buf_info,
 	return ret;
 }
 
+/* gdc: allocate a block of memory */
+int gdc_alloc_mem(struct gdc_usr_ctx_s *ctx, uint32_t len, uint32_t type)
+{
+	int dir = 0, index = -1, buf_fd = -1;
+	struct gdc_dmabuf_req_s buf_cfg;
+
+	memset(&buf_cfg, 0, sizeof(buf_cfg));
+	if (type == OUTPUT_BUFF_TYPE)
+		dir = DMA_FROM_DEVICE;
+	else
+		dir = DMA_TO_DEVICE;
+
+	buf_cfg.len = len;
+	buf_cfg.dma_dir = dir;
+
+	index = _gdc_alloc_dma_buffer(ctx->gdc_client, dir,
+					buf_cfg.len);
+	if (index < 0)
+		return -1;
+
+	/* get dma fd*/
+	buf_fd = _gdc_get_dma_buffer_fd(ctx->gdc_client,
+						index);
+	if (buf_fd < 0) {
+		E_GDC("%s: alloc failed\n", __func__);
+		return -1;
+	}
+	D_GDC("%s: dma_fd=%d\n", buf_fd, __func__);
+	/* after alloc, dmabuffer free can be called, it just dec refcount */
+	_gdc_free_dma_buffer(ctx->gdc_client, index);
+
+	return buf_fd;
+}
+
+/* gdc: free a block of memory */
+void gdc_release_mem(int shared_fd)
+{
+	if (shared_fd > 0)
+		close(shared_fd);
+}
+
+/* gdc: sync cache for a block of memory */
+void gdc_sync_for_device_mem(struct gdc_usr_ctx_s *ctx, int shared_fd)
+{
+	int ret = -1;
+
+	if (shared_fd > 0) {
+		ret = ioctl(ctx->gdc_client, GDC_SYNC_DEVICE, &shared_fd);
+		if (ret < 0) {
+			E_GDC("%s ioctl failed\n", __func__);
+			return;
+		}
+	}
+}
+
+/* gdc: invalid cache for a block of memory */
+void gdc_sync_for_cpu_mem(struct gdc_usr_ctx_s *ctx, int shared_fd)
+{
+	int ret = -1;
+
+	if (shared_fd > 0) {
+		ret = ioctl(ctx->gdc_client, GDC_SYNC_CPU, &shared_fd);
+		if (ret < 0) {
+			E_GDC("%s ioctl failed\n", __func__);
+			return;
+		}
+	}
+}
+
+int dmabuf_heap_open(char *name)
+{
+	int ret, fd;
+	char buf[256];
+
+	ret = snprintf(buf, 256, "%s/%s", DEVPATH, name);
+	if (ret < 0) {
+		E_GDC("snprintf failed!\n");
+		return ret;
+	}
+
+	fd = open(buf, O_RDWR);
+	/* if errno == 0, which means heap_codecmm open success
+	 * else if errno == 2, which means there is no heap_codecmm, using ion replace
+	 */
+	if (errno != 0 && errno != 2)
+		E_GDC("%s %d open %s failed %s\n", __func__, __LINE__, buf , strerror(errno));
+	return fd;
+}
+
+static int dmabuf_heap_alloc_fdflags(int fd, size_t len, unsigned int fd_flags,
+				     unsigned int heap_flags, int *dmabuf_fd)
+{
+	struct dma_heap_allocation_data data = {
+		.len = len,
+		.fd = 0,
+		.fd_flags = fd_flags,
+		.heap_flags = heap_flags,
+	};
+	int ret;
+
+	if (!dmabuf_fd)
+		return -EINVAL;
+
+	ret = ioctl(fd, DMA_HEAP_IOCTL_ALLOC, &data);
+	if (ret < 0)
+		return ret;
+	*dmabuf_fd = (int)data.fd;
+	return ret;
+}
+
+int dmabuf_heap_alloc(int fd, size_t len, unsigned int flags,
+			     int *dmabuf_fd)
+{
+	return dmabuf_heap_alloc_fdflags(fd, len, O_RDWR | O_CLOEXEC, flags,
+					 dmabuf_fd);
+}
+
+void dmabuf_sync(int fd, int start_stop)
+{
+	struct dma_buf_sync sync = {
+		.flags = start_stop | DMA_BUF_SYNC_RW,
+	};
+	int ret;
+
+	ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+	if (ret)
+		E_GDC("sync failed %d\n", errno);
+}
+
+void dmabuf_heap_release(int dmabuf_fd)
+{
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+}
+
+void  dmabuf_heap_close(int heap_fd)
+{
+	if (heap_fd >= 0)
+		close(heap_fd);
+}
+
 int gdc_alloc_buffer (struct gdc_usr_ctx_s *ctx, uint32_t type,
 			struct gdc_alloc_buffer_s *buf, bool cache_flag)
 {
@@ -270,17 +422,25 @@ int gdc_alloc_buffer (struct gdc_usr_ctx_s *ctx, uint32_t type,
 
 		if (ctx->mem_type == AML_GDC_MEM_ION) {
 			int ret = -1;
-			IONMEM_AllocParams ion_alloc_params;
-
-			ret = ion_mem_alloc(ctx->ion_fd, buf->len[i], &ion_alloc_params,
-						cache_flag);
-			if (ret < 0) {
-				E_GDC("%s,%d,Not enough memory\n",__func__,
-					__LINE__);
-				return -1;
+			if (ctx->ion_fd >= 0) {
+				IONMEM_AllocParams ion_alloc_params;
+				ret = ion_mem_alloc(ctx->ion_fd, buf->len[i], &ion_alloc_params,
+							cache_flag);
+				if (ret < 0) {
+					E_GDC("%s,%d,Not enough memory\n",__func__,
+						__LINE__);
+					return -1;
+				}
+				buf_fd[i] = ion_alloc_params.mImageFd;
+				D_GDC("gdc_alloc_buffer: ion_fd=%d\n", buf_fd[i]);
+			} else if (ctx->dma_heap_fd >= 0) {
+				ret = dmabuf_heap_alloc(ctx->dma_heap_fd, buf->len[i], 0, &buf_fd[i]);
+				if (ret < 0) {
+					E_GDC("%s,%d,Not enough memory\n",__func__, __LINE__);
+					return -1;
+				}
+				D_GDC("gdc_alloc_buffer: dma_heap_fd=%d\n", buf_fd[i]);
 			}
-			buf_fd[i] = ion_alloc_params.mImageFd;
-			D_GDC("gdc_alloc_buffer: ion_fd=%d\n", buf_fd[i]);
 		} else if (ctx->mem_type == AML_GDC_MEM_DMABUF) {
 			index = _gdc_alloc_dma_buffer(ctx->gdc_client, dir,
 							buf_cfg.len);
@@ -604,7 +764,7 @@ int gdc_process(struct gdc_usr_ctx_s *ctx)
 
 	ret = ioctl(ctx->gdc_client, GDC_PROCESS_EX, gs_ex);
 	if (ret < 0) {
-		E_GDC("GDC_RUN ioctl failed\n");
+		E_GDC("GDC_PROCESS_EX ioctl failed\n");
 		return ret;
 	}
 
@@ -636,6 +796,7 @@ int gdc_process_with_builtin_fw(struct gdc_usr_ctx_s *ctx)
 	return 0;
 }
 
+/* gdc or ion: sync cache */
 int gdc_sync_for_device(struct gdc_usr_ctx_s *ctx)
 {
 	int ret = -1, i;
@@ -674,6 +835,7 @@ int gdc_sync_for_device(struct gdc_usr_ctx_s *ctx)
 	return 0;
 }
 
+/* gdc or ion: invalid cache */
 int gdc_sync_for_cpu(struct gdc_usr_ctx_s *ctx)
 {
 	int ret = -1, i;
