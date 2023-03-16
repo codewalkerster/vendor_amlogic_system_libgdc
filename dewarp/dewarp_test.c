@@ -472,7 +472,7 @@ int main(int argc, char** argv)
 		i_c_stride = 0;
 		o_c_stride = 0;
 	} else {
-		E_GDC("Error unknow format\n");
+		E_GDC("Error unknown format\n");
 		return ret;
 	}
 

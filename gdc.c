@@ -633,7 +633,7 @@ int gdc_init_cfg(struct gdc_usr_ctx_s *ctx, struct gdc_param *tparm,
 		i_c_stride = 0;
 		o_c_stride = 0;
 	} else {
-		E_GDC("Error unknow format\n");
+		E_GDC("Error unknown format\n");
 		return ret;
 	}
 
