@@ -37,6 +37,7 @@ struct proj_param {
     float zoom;
     float strength_hor;
     float strength_ver;
+    int mirror;
 };
 
 struct win_param {
@@ -50,6 +51,10 @@ struct win_param {
     int img_end_y;
     int mesh_x_len;
     int mesh_y_len;
+    /* crop function, if not used, set them to 0 */
+    int crop_en;
+    int crop_x_start;
+    int crop_y_start;
 };
 
 struct clb_param {
