@@ -22,6 +22,9 @@ struct input_param {
     int offset_x;
     int offset_y;
     int fov;
+
+    float radius;  /* optional parameter, if set to 0, use MAX(width, height)/2.0 internally */
+    int fisheye;   /* 1: fisheye lens 0: not */
 };
 
 struct output_param {
@@ -38,6 +41,15 @@ struct proj_param {
     float strength_hor;
     float strength_ver;
     int mirror;
+
+    /* X/Y shearing parameter */
+    double shx;
+    double shy;
+    /* pitch/yaw/roll/fov are only valid when fisheye == 1 in struct input_param */
+    int pitch;
+    int yaw;
+    int roll;
+    int fov;
 };
 
 struct win_param {
@@ -129,7 +141,8 @@ typedef enum _dw_proj_mode_ {
     PROJ_MODE_EQUIDISTANCE,
     PROJ_MODE_STEREOGRAPHIC,
     PROJ_MODE_ORTHOGONAL,
-    PROJ_MODE_LINEAR
+    PROJ_MODE_LINEAR,
+    PROJ_MODE_PERSPECTIVE
 } dw_proj_mode_t;
 
 typedef enum _data_mode_ {

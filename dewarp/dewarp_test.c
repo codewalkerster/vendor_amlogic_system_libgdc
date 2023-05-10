@@ -22,9 +22,9 @@
 #include <dma-heap.h>
 #include "dewarp_api.h"
 
-struct dewarp_params dewarp_params;
 static int mem_type;
-static int process_circle = 1;
+static int firmware_circle = 1;
+static int hardware_circle = 1;
 char in_file[256];
 char out_file[256];
 char dump_fw_file[256];
@@ -52,12 +52,14 @@ static void print_usage(void)
 	printf ("  -input_size <WxH>                                                                                                                                       \n");
 	printf ("  -input_offset <X_Y>                                                                                                                                     \n");
 	printf ("  -fov <Num>                                                                                                                                              \n");
+	printf ("  -radius <Num>                                                                                                                                           \n");
+	printf ("  -fisheye <0:normal lens 1:fisheye lens>                                                                                                                 \n");
 	printf ("  -color_mode <0:YUV420_PLANAR 1:YUV420_SEMIPLANAR 2:YONLY>                                                                                               \n");
 	printf ("  -output_size <WxH>                                                                                                                                      \n");
-	printf ("  -proj1 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV>                                                                                            \n");
-	printf ("  -proj2 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV>                                                                                            \n");
-	printf ("  -proj3 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV>                                                                                            \n");
-	printf ("  -proj4 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV>                                                                                            \n");
+	printf ("  -proj1 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV_Mirror_ShearX_ShearY_Pitch_Yaw_Roll_Fov>                                                    \n");
+	printf ("  -proj2 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV_Mirror_ShearX_ShearY_Pitch_Yaw_Roll_Fov>                                                    \n");
+	printf ("  -proj3 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV_Mirror_ShearX_ShearY_Pitch_Yaw_Roll_Fov>                                                    \n");
+	printf ("  -proj4 <ProjMode_Pan_Tilt_Rotation_Zoom_StrengthH_StrengthV_Mirror_ShearX_ShearY_Pitch_Yaw_Roll_Fov>                                                    \n");
 	printf ("  -clb1 <Fx_Fy_Cx_Cy_K1_K2_K3_P1_P2_K4_K5_K6>                                                                                                             \n");
 	printf ("  -clb2 <Fx_Fy_Cx_Cy_K1_K2_K3_P1_P2_K4_K5_K6>                                                                                                             \n");
 	printf ("  -clb3 <Fx_Fy_Cx_Cy_K1_K2_K3_P1_P2_K4_K5_K6>                                                                                                             \n");
@@ -78,7 +80,9 @@ static void print_usage(void)
 	printf ("  -win4 <WinStartX_WinEndX_WinStartY_WinEndY_ImgStartX_ImgEndX_ImgStartY_ImgEndY_MeshXLen_MeshYLen_CropEn_CropXStart_CropYStart>                          \n");
 	printf ("  -prm_mode <0:use proj_param, 1:use clb_param 2:use meshin 3:use dptz_param>                                                                             \n");
 	printf ("  -eis_matrix <Param1_Param2_Param3_Param4_Param5_Param6_Param7_Param8_Param9>                                                                            \n");
-	printf ("  -circle <Num>                                                                                                                                           \n");
+	printf ("  -circle <Num, set the same number of firmware calculation and hardware processing>                                                                      \n");
+	printf ("  -firmware_circle <Num, the number of firmware calculation>                                                                                              \n");
+	printf ("  -hardware_circle <Num, the number of hardware processing>                                                                                               \n");
 	printf ("  -in_file  <ImageName>                                                                                                                                   \n");
 	printf ("  -out_file <ImageName>                                                                                                                                   \n");
 	printf ("  -mem_type <0:ion 1:gdc_dmabuf 2:generic dma buf, /dev/dma_heap/xxx>                                                                                     \n");
@@ -86,20 +90,20 @@ static void print_usage(void)
 	printf ("\n");
 }
 
-static int parse_command_line(int argc, char *argv[])
+static int parse_command_line(int argc, char *argv[], struct dewarp_params *dewarp_params)
 {
-	int i, param_cnt = 0;
-	struct input_param *in      = &dewarp_params.input_param;
-	struct output_param *out    = &dewarp_params.output_param;
-	struct proj_param *proj     = &dewarp_params.proj_param[0];
-	struct win_param *win       = &dewarp_params.win_param[0];
-	struct clb_param *clb       = &dewarp_params.clb_param[0];
-	struct meshin_param *meshin = &dewarp_params.meshin_param[0];
-	struct dptz_param * dptz_param = &dewarp_params.dptz_param;
-	struct proc_param *proc_param = &dewarp_params.proc_param;
+	int i, param_cnt = 0, process_circle = 0;
+	struct input_param *in      = &dewarp_params->input_param;
+	struct output_param *out    = &dewarp_params->output_param;
+	struct proj_param *proj     = &dewarp_params->proj_param[0];
+	struct win_param *win       = &dewarp_params->win_param[0];
+	struct clb_param *clb       = &dewarp_params->clb_param[0];
+	struct meshin_param *meshin = &dewarp_params->meshin_param[0];
+	struct dptz_param * dptz_param = &dewarp_params->dptz_param;
+	struct proc_param *proc_param = &dewarp_params->proc_param;
 
-	dewarp_params.tile_x_step = 8; /* default x step */
-	dewarp_params.tile_y_step = 8; /* default y step */
+	dewarp_params->tile_x_step = 8; /* default x step */
+	dewarp_params->tile_y_step = 8; /* default y step */
 	/* parse command line */
 	for (i = 1; i < argc; i++) {
 		if (strncmp (argv[i], "-", 1) == 0) {
@@ -107,11 +111,11 @@ static int parse_command_line(int argc, char *argv[])
 				print_usage();
 				return -1;
 			} else if (strcmp (argv[i] + 1, "win_num") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.win_num) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->win_num) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "win_num") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.win_num) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->win_num) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "input_size") == 0 && ++i < argc &&
@@ -126,8 +130,14 @@ static int parse_command_line(int argc, char *argv[])
 				sscanf (argv[i], "%d", &in->fov) == 1) {
 				param_cnt++;
 				continue;
+			} else if (strcmp (argv[i] + 1, "radius") == 0 && ++i < argc &&
+				sscanf (argv[i], "%f", &in->radius) == 1) {
+				param_cnt++;
+			} else if (strcmp (argv[i] + 1, "fisheye") == 0 && ++i < argc &&
+				sscanf (argv[i], "%d", &in->fisheye) == 1) {
+				param_cnt++;
 			} else if (strcmp (argv[i] + 1, "color_mode") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.color_mode) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->color_mode) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "output_size") == 0 && ++i < argc &&
@@ -135,23 +145,28 @@ static int parse_command_line(int argc, char *argv[])
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "proj1") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d", &proj[0].projection_mode, &proj[0].pan, &proj[0].tilt,
-					&proj[0].rotation, &proj[0].zoom, &proj[0].strength_hor, &proj[0].strength_ver, &proj[0].mirror) >= 7) {
+				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d_%lf_%lf_%d_%d_%d_%d", &proj[0].projection_mode, &proj[0].pan, &proj[0].tilt,
+				&proj[0].rotation, &proj[0].zoom, &proj[0].strength_hor, &proj[0].strength_ver, &proj[0].mirror,
+				&proj[0].shx, &proj[0].shy, &proj[0].pitch, &proj[0].yaw, &proj[0].roll,
+				&proj[0].fov) >= 7) {
 				param_cnt++;
-				continue;
 			} else if (strcmp (argv[i] + 1, "proj2") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d", &proj[1].projection_mode, &proj[1].pan, &proj[1].tilt,
-					&proj[1].rotation, &proj[1].zoom, &proj[1].strength_hor, &proj[1].strength_ver, &proj[1].mirror) >= 7) {
+				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d_%lf_%lf_%d_%d_%d_%d", &proj[1].projection_mode, &proj[1].pan, &proj[1].tilt,
+				&proj[1].rotation, &proj[1].zoom, &proj[1].strength_hor, &proj[1].strength_ver, &proj[1].mirror,
+				&proj[1].shx, &proj[1].shy, &proj[1].pitch, &proj[1].yaw, &proj[1].roll,
+				&proj[1].fov) >= 7) {
 				param_cnt++;
-				continue;
 			} else if (strcmp (argv[i] + 1, "proj3") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d", &proj[2].projection_mode, &proj[2].pan, &proj[2].tilt,
-					&proj[2].rotation, &proj[2].zoom, &proj[2].strength_hor, &proj[2].strength_ver, &proj[2].mirror) >= 7) {
+				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d_%lf_%lf_%d_%d_%d_%d", &proj[2].projection_mode, &proj[2].pan, &proj[2].tilt,
+				&proj[2].rotation, &proj[2].zoom, &proj[2].strength_hor, &proj[2].strength_ver, &proj[2].mirror,
+				&proj[2].shx, &proj[2].shy, &proj[2].pitch, &proj[2].yaw, &proj[2].roll,
+				&proj[2].fov) >= 7) {
 				param_cnt++;
-				continue;
 			} else if (strcmp (argv[i] + 1, "proj4") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d", &proj[3].projection_mode, &proj[3].pan, &proj[3].tilt,
-					&proj[3].rotation, &proj[3].zoom, &proj[3].strength_hor, &proj[3].strength_ver, &proj[3].mirror) >= 7) {
+				sscanf (argv[i], "%d_%d_%d_%d_%f_%f_%f_%d_%lf_%lf_%d_%d_%d_%d", &proj[3].projection_mode, &proj[3].pan, &proj[3].tilt,
+				&proj[3].rotation, &proj[3].zoom, &proj[3].strength_hor, &proj[3].strength_ver, &proj[3].mirror,
+				&proj[3].shx, &proj[3].shy, &proj[3].pitch, &proj[3].yaw, &proj[3].roll,
+				&proj[3].fov) >= 7) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "clb1") == 0 && ++i < argc &&
@@ -252,11 +267,11 @@ static int parse_command_line(int argc, char *argv[])
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "prm_mode") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.prm_mode) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->prm_mode) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "eis_matrix") == 0 && ++i < argc) {
-				float *eis_matrix = dewarp_params.eis_correct_matrix;
+				float *eis_matrix = dewarp_params->eis_correct_matrix;
 
 				if (sscanf (argv[i], "%f_%f_%f_%f_%f_%f_%f_%f_%f",
 				&eis_matrix[0], &eis_matrix[1], &eis_matrix[2],
@@ -264,15 +279,25 @@ static int parse_command_line(int argc, char *argv[])
 				&eis_matrix[6], &eis_matrix[7], &eis_matrix[8]) == 9)
 				param_cnt++;
 			} else if (strcmp (argv[i] + 1, "tile_x_step") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.tile_x_step) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->tile_x_step) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "tile_y_step") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params.tile_y_step) == 1) {
+				sscanf (argv[i], "%d", &dewarp_params->tile_y_step) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "circle") == 0 && ++i < argc &&
 				sscanf (argv[i], "%d", &process_circle) == 1) {
+				firmware_circle = process_circle;
+				hardware_circle = process_circle;
+				param_cnt++;
+				continue;
+			} else if (strcmp (argv[i] + 1, "firmware_circle") == 0 && ++i < argc &&
+				sscanf (argv[i], "%d", &firmware_circle) == 1) {
+				param_cnt++;
+				continue;
+			} else if (strcmp (argv[i] + 1, "hardware_circle") == 0 && ++i < argc &&
+				sscanf (argv[i], "%d", &hardware_circle) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "in_file") == 0 && ++i < argc &&
@@ -301,22 +326,23 @@ static int parse_command_line(int argc, char *argv[])
 	}
 
 	printf("########## dewarp params ##########\n");
-	printf("process_circle:%d win_num:%d color_mode:%d (0:YUV420_PLANAR 1:YUV420_SEMIPLANAR 2:YONLY)\n", process_circle, dewarp_params.win_num, dewarp_params.color_mode);
-	printf("   tile_x_step:%d tile_y_step:%d\n", dewarp_params.tile_x_step, dewarp_params.tile_y_step);
-	printf("   input_param: width(%5d) height(%5d) offset_x(%5d) offset_y(%5d) fov(%5d)\n", in->width, in->height, in->offset_x, in->offset_y, in->fov);
+	printf("process_circle:firmware(%d)hardware(%d) win_num:%d color_mode:%d (0:YUV420_PLANAR 1:YUV420_SEMIPLANAR 2:YONLY)\n", firmware_circle, hardware_circle, dewarp_params->win_num, dewarp_params->color_mode);
+	printf("   tile_x_step:%d tile_y_step:%d\n", dewarp_params->tile_x_step, dewarp_params->tile_y_step);
+	printf("   input_param: width(%5d) height(%5d) offset_x(%5d) offset_y(%5d) fov(%5d) radius(%lf) fisheye(%d)\n", in->width, in->height, in->offset_x, in->offset_y, in->fov, in->radius, in->fisheye);
 	printf("     out_param: width(%5d) height(%5d)\n", out->width, out->height);
 
 	printf("    proj_param:");
-	for (i = 0; i < dewarp_params.win_num; i++) {
+	for (i = 0; i < dewarp_params->win_num; i++) {
 		if (i != 0)
 			printf("              :");
-		printf("projection_mode(%5d) pan(%5d) tilt(%5d) rotation(%5d) zoom(%5f) strength_hor(%5f) strength_ver(%5f) mirror(%5d)\n",
+		printf("projection_mode(%5d) pan(%5d) tilt(%5d) rotation(%5d) zoom(%5f) strength_hor(%5f) strength_ver(%5f) mirror(%5d) shx(%lf) shy(%lf) rotation_axis(pitch:%d yaw:%d roll:%d) fov:%d\n",
 			proj[i].projection_mode, proj[i].pan, proj[i].tilt,
-			proj[i].rotation, proj[i].zoom, proj[i].strength_hor, proj[i].strength_ver, proj[i].mirror);
+			proj[i].rotation, proj[i].zoom, proj[i].strength_hor, proj[i].strength_ver, proj[i].mirror,
+			proj[i].shx, proj[i].shy, proj[i].pitch, proj[i].yaw, proj[i].roll, proj[i].fov);
 	}
 
 	printf("     clb_param:");
-	for (i = 0; i < dewarp_params.win_num; i++) {
+	for (i = 0; i < dewarp_params->win_num; i++) {
 		if (i != 0)
 			printf("              :");
 		printf("fx(%5lf) fy(%5lf) cx(%5lf) cy(%5lf) k1(%5lf) k2(%5lf) k3(%5lf) p1(%5lf) p2(%5lf) k4(%5lf) k5(%5lf) k6(%5lf)\n",
@@ -325,7 +351,7 @@ static int parse_command_line(int argc, char *argv[])
 	}
 
 	printf("     meshin_param:");
-	for (i = 0; i < dewarp_params.win_num; i++) {
+	for (i = 0; i < dewarp_params->win_num; i++) {
 		if (i != 0)
 			printf("              :");
 		printf("xstart(%5d) ystart(%5d) xlen(%5d) ylen(%5d) xstep(%5d) ystep(%5d) meshin_data_file(%s)\n",
@@ -349,7 +375,7 @@ static int parse_command_line(int argc, char *argv[])
 		dptz_param->k5,dptz_param->k6,dptz_param->p1,dptz_param->p2);
 
 	printf("     win_param:");
-	for (i = 0; i < dewarp_params.win_num; i++) {
+	for (i = 0; i < dewarp_params->win_num; i++) {
 		if (i != 0)
 			printf("           :");
 		printf("win_start_x(%5d) win_end_x(%5d) win_start_y(%5d) win_end_y(%5d) img_start_x(%5d) img_end_x(%5d) img_start_y(%5d) img_end_y(%5d) %5d %5d\n",
@@ -363,10 +389,10 @@ static int parse_command_line(int argc, char *argv[])
 	printf("intrp(%d) replace(%d,%d,%d) edge(%d,%d,%d)\n", proc_param->intrp_mode,
 		proc_param->replace_0, proc_param->replace_1, proc_param->replace_2,
 		proc_param->edge_0, proc_param->edge_1, proc_param->edge_2);
-	if (dewarp_params.prm_mode == 4 || dewarp_params.prm_mode == 5) {
+	if (dewarp_params->prm_mode == 4 || dewarp_params->prm_mode == 5) {
 		printf("eis_correct_matrix:");
 		for (i = 0; i < 9; i++)
-			printf("%f ", dewarp_params.eis_correct_matrix[i]);
+			printf("%f ", dewarp_params->eis_correct_matrix[i]);
 		printf("\n");
 	}
 
@@ -388,6 +414,7 @@ int main(int argc, char** argv)
 {
 	int i, j;
 	unsigned long stime;
+	struct dewarp_params dewarp_params;
 	struct input_param *in   = &dewarp_params.input_param;
 	struct output_param *out = &dewarp_params.output_param;
 
@@ -414,7 +441,8 @@ int main(int argc, char** argv)
 	int *fw_buffer = NULL;
 	int heap_fd = -1, dmabuf_fd = -1;
 
-	ret = parse_command_line(argc, argv);
+	memset(&dewarp_params, 0, sizeof(struct dewarp_params));
+	ret = parse_command_line(argc, argv, &dewarp_params);
 	if (ret < 0)
 		return -1;
 
@@ -584,7 +612,7 @@ int main(int argc, char** argv)
 	}
 
 	stime = myclock();
-	for (i = 0; i< process_circle; i++)
+	for (i = 0; i< firmware_circle; i++)
 		ret = dewarp_gen_config(&dewarp_params, fw_buffer);
 
 	printf("fw generation time=%ld ms, total FW bytes:%d\n", myclock() - stime, ret);
@@ -596,7 +624,7 @@ int main(int argc, char** argv)
 	}
 
 	stime = myclock();
-	for (i = 0; i< process_circle; i++) {
+	for (i = 0; i< hardware_circle; i++) {
 		ret = gdc_process(&ctx);
 		if (ret < 0) {
 			E_GDC("ioctl failed\n");
