@@ -1,10 +1,12 @@
-/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
- * DMABUF Heaps Userspace API
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
  *
- * Copyright (C) 2011 Google, Inc.
- * Copyright (C) 2019 Linaro Ltd.
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
  */
+
 #ifndef _UAPI_LINUX_DMABUF_POOL_H
 #define _UAPI_LINUX_DMABUF_POOL_H
 

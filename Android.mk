@@ -14,7 +14,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
 	system/memory/libion/kernel-headers/linux/
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
-LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_proprietary
+LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-MIT legacy_proprietary
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted proprietary by_exception_only
 LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 
@@ -41,7 +41,7 @@ LOCAL_CFLAGS += -g
 LOCAL_CPPFLAGS := -g
 
 LOCAL_MODULE := gdc_test
-LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_proprietary
+LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-MIT legacy_proprietary
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted proprietary by_exception_only
 LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 
@@ -86,7 +86,7 @@ LOCAL_CFLAGS += -g
 LOCAL_CPPFLAGS := -g
 
 LOCAL_MODULE := dewarp_test
-LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_proprietary
+LOCAL_LICENSE_KINDS := legacy_by_exception_only legacy_notice SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-MIT legacy_proprietary
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted proprietary by_exception_only
 LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 
@@ -117,7 +117,7 @@ LOCAL_MODULE := gdc_chip_check
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 26 && echo OK),OK)
 LOCAL_PROPRIETARY_MODULE := true
 endif
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_by_exception_only legacy_notice legacy_proprietary
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-MIT legacy_by_exception_only legacy_notice legacy_proprietary
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted proprietary by_exception_only
 LOCAL_NOTICE_FILE := $(LOCAL_PATH)/LICENSE
 include $(BUILD_EXECUTABLE)
