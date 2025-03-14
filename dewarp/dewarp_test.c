@@ -137,7 +137,7 @@ static int parse_command_line(int argc, char *argv[], struct dewarp_params *dewa
 				sscanf (argv[i], "%d", &in->fisheye) == 1) {
 				param_cnt++;
 			} else if (strcmp (argv[i] + 1, "color_mode") == 0 && ++i < argc &&
-				sscanf (argv[i], "%d", &dewarp_params->color_mode) == 1) {
+				sscanf (argv[i], "%x", &dewarp_params->color_mode) == 1) {
 				param_cnt++;
 				continue;
 			} else if (strcmp (argv[i] + 1, "output_size") == 0 && ++i < argc &&
@@ -440,6 +440,7 @@ int main(int argc, char** argv)
 	int fw_bytes = 0;
 	int *fw_buffer = NULL;
 	int heap_fd = -1, dmabuf_fd = -1;
+	int uvswap_enable = 0;
 
 	memset(&dewarp_params, 0, sizeof(struct dewarp_params));
 	ret = parse_command_line(argc, argv, &dewarp_params);
@@ -483,6 +484,11 @@ int main(int argc, char** argv)
 	ctx.plane_number = plane_number;   /* data in one continuous mem block */
 	ctx.dev_type = AML_GDC;            /* dewarp */
 
+	if (dewarp_params.color_mode & UVSWAP_ENABLE) {
+		uvswap_enable = 1;
+		dewarp_params.color_mode &= ~UVSWAP_ENABLE;
+	}
+
 	format = dewarp_to_libgdc_format(dewarp_params.color_mode);
 
 	i_width  = in->width;
@@ -520,7 +526,7 @@ int main(int argc, char** argv)
 	gdc_gs->gdc_config.output_height = o_height;
 	gdc_gs->gdc_config.output_y_stride = o_y_stride;
 	gdc_gs->gdc_config.output_c_stride = o_c_stride;
-	gdc_gs->gdc_config.format = format;
+	gdc_gs->gdc_config.format = format | (uvswap_enable ? UVSWAP_ENABLE : 0);
 	gdc_gs->magic = sizeof(*gdc_gs);
 
 	ret = gdc_create_ctx(&ctx);
